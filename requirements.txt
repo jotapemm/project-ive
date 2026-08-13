@@ -1,0 +1,20 @@
+anthropic>=0.40.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+pdfplumber>=0.11.0
+python-dotenv>=1.0.0
+pytest>=8.0.0
+
+# servidor HTTP (ive/servidor.py) — a costura com a interface
+fastapi>=0.115.0
+uvicorn>=0.32.0
+httpx>=0.28.0        # tambem usado pelo TestClient do FastAPI
+python-multipart>=0.0.9   # upload de audio na rota /voz/ouvir
+
+# voz: OUVIR (ive/voz.py). Whisper local — o audio nao sai da maquina.
+# Baixa ~500MB de modelo na primeira transcricao (IVE_MODELO_VOZ=small).
+# Se voce nao vai usar voz, pode remover esta linha: o resto funciona sem.
+faster-whisper>=1.1.0
+
+# voz: FALAR nao aparece aqui — roda no navegador, com a sintese do
+# proprio Windows. Zero dependencia de servidor. Ver ui/src/voz.ts.

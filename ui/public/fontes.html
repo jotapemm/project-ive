@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>I.V.E — escolher a fonte</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Anton&family=Squada+One&family=Chakra+Petch:wght@700&family=Michroma&family=Space+Grotesk:wght@700&family=Saira+Condensed:wght@900&family=Bai+Jamjuree:wght@700&family=Oswald:wght@700&display=swap" />
+  <style>
+    :root {
+      --fundo: #0d0d13;
+      --painel: #181922;
+      --frente: #fcfcfc;
+      --fraco: #8b8ba3;
+      --borda: #262636;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--frente);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      padding: 32px
+    }
+
+    h1 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 4px
+    }
+
+    p.sub {
+      color: var(--fraco);
+      font-size: 12.5px;
+      margin: 0 0 26px;
+      max-width: 640px;
+      line-height: 1.6
+    }
+
+    .grade {
+      display: grid;
+      gap: 14px
+    }
+
+    .amostra {
+      background: var(--painel);
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      padding: 22px 26px;
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      flex-wrap: wrap
+    }
+
+    .rotulo {
+      font-size: 11px;
+      color: var(--fraco);
+      font-family: ui-monospace, monospace;
+      min-width: 190px;
+      flex: none
+    }
+
+    .rotulo b {
+      display: block;
+      color: var(--frente);
+      font-size: 12.5px;
+      font-family: inherit;
+      font-weight: 600;
+      margin-bottom: 2px
+    }
+
+    /* Mesma construção da logo de verdade: barra + quadrado + glifo. */
+    .lock {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 56px;
+      line-height: 1;
+      color: var(--frente)
+    }
+
+    .bar {
+      background: var(--frente);
+      flex: none
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Qual fonte para o I.V.E</h1>
+  <p class="sub">
+    Todas montadas <b>do mesmo jeito que a logo real</b>: o I e os pontos são
+    barra e quadrado desenhados, não letras — só o V e o E vêm da fonte. O
+    espaçamento é o mesmo cálculo tinta-a-tinta do sistema, então a comparação
+    é justa. Me diz o nome da que você quiser.
+  </p>
+  <div class="grade" id="grade"></div>
+
+  <script>
+    const FONTES = [
+      ["Archivo Black", "a atual — grotesca pesada, cantos levemente suavizados"],
+      ["Anton", "condensada e bem chapada, muito peso"],
+      ["Squada One", "quadradona, terminais retos"],
+      ["Chakra Petch", "geométrica com cantos cortados, ar técnico", 700],
+      ["Michroma", "a mais quadrada de todas, bem larga"],
+      ["Space Grotesk", "quadrada moderna, mais leve", 700],
+      ["Saira Condensed", "condensada e reta", 900],
+      ["Bai Jamjuree", "quadrada suave, cantos discretos", 700],
+      ["Oswald", "condensada clássica", 700],
+    ];
+
+    const grade = document.getElementById("grade");
+    const ctx = document.createElement("canvas").getContext("2d");
+
+    for (const [nome, nota, peso] of FONTES) {
+      const linha = document.createElement("div");
+      linha.className = "amostra";
+      linha.innerHTML = `<div class="rotulo"><b>${nome}</b>${nota}</div>`;
+
+      const lock = document.createElement("div");
+      lock.className = "lock";
+      lock.style.fontFamily = `"${nome}", sans-serif`;
+      if (peso) lock.style.fontWeight = peso;
+      lock.innerHTML =
+        `<div class="bar haste"></div><div class="bar pingo"></div>` +
+        `<span class="gv">V</span><div class="bar ponto"></div><span class="ge">E</span>`;
+      linha.appendChild(lock);
+      grade.appendChild(linha);
+    }
+
+    /* Mesmo cálculo do Logo.tsx: mede o glifo I, dimensiona as barras, e
+       cancela a lateral vazia que a fonte embute no V e no E. */
+    function ajustar() {
+      document.querySelectorAll(".lock").forEach((lock) => {
+        const cs = getComputedStyle(lock);
+        ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        const m = ctx.measureText("I");
+        const cap = Math.round(m.actualBoundingBoxAscent);
+        const w = Math.round(Math.abs(m.actualBoundingBoxRight - m.actualBoundingBoxLeft));
+        if (!cap || !w || w < 4) return;
+
+        const vao = Math.max(2, Math.round(w * 0.3));
+        lock.querySelectorAll(".bar").forEach((b) => { b.style.width = w + "px"; b.style.height = w + "px"; });
+        lock.querySelector(".haste").style.height = cap + "px";
+        lock.style.gap = vao + "px";
+
+        for (const [sel, letra] of [[".gv", "V"], [".ge", "E"]]) {
+          const el = lock.querySelector(sel);
+          const g = ctx.measureText(letra);
+          el.style.marginLeft = Math.round(g.actualBoundingBoxLeft) + "px";
+          el.style.marginRight = Math.round(g.actualBoundingBoxRight - g.width) + "px";
+        }
+      });
+    }
+
+    document.fonts.ready.then(ajustar);
+    setTimeout(ajustar, 600);
+    setTimeout(ajustar, 1800);
+  </script>
+</body>
+
+</html>

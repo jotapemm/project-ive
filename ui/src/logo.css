@@ -1,0 +1,389 @@
+/*
+ * Logo I.V.E.
+ *
+ * Porte fiel do original (logo_ive_arco_ponto_quadrado.html). Os keyframes
+ * são os mesmos, com as mesmas porcentagens — não redesenhei nada.
+ *
+ * O conceito: o pingo quadrado do "i" é a flecha e a haste é o arco. Ela
+ * encolhe pra armar, estica de volta e lança o quadrado, que gira uma volta
+ * e cai virando o primeiro ponto de I.V.E. A haste vira o I maiúsculo.
+ *
+ * As medidas (largura da barra, altura da haste, distâncias) NÃO estão
+ * chumbadas aqui: o Logo.tsx mede o glifo "I" da fonte real e escreve as
+ * variáveis. Assim a barra tem exatamente a espessura do I em qualquer
+ * tamanho, e a logo não quebra se a fonte mudar.
+ */
+
+.ive-logo {
+  --cx: 60px;
+  /* deslocamento pra centralizar o "i" antes de virar I.V.E */
+  --dx: -24px;
+  /* onde o pingo fica em relação ao ponto final             */
+  --dy: -78px;
+  /* altura de repouso do pingo sobre a haste                */
+  --draw: 23px;
+  /* o quanto a corda do arco puxa                           */
+
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--fonte-logo, "Archivo Black"), sans-serif;
+  font-weight: var(--peso-logo, 400);
+  line-height: 1;
+  color: var(--logo-frente, #fcfcfc);
+  user-select: none;
+}
+
+/*
+ * As peças da marca são retângulos PUROS — o I e os dois pontos são
+ * desenhados, não são letras. Os zeros abaixo não são decoração: a barra
+ * lateral do app já se chamou `.barra` e o `border-radius: 14px` dela
+ * vazou pra cá, arredondando o I e um dos pontos (e só um deles, o que
+ * ficou pior ainda). Renomeamos a classe, e estes resets garantem que
+ * nenhuma regra futura de layout consiga entortar a logo de novo.
+ */
+.ive-logo .tira,
+.ive-logo .pingo,
+.ive-logo .pingo-y,
+.ive-logo .pingo-r,
+.ive-marca span {
+  border-radius: 0;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.ive-logo .tira {
+  background: var(--logo-frente, #fcfcfc);
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.ive-logo .haste {
+  height: 60px;
+  transform-origin: bottom center;
+}
+
+.ive-logo .pingo {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.ive-logo .pingo-y,
+.ive-logo .pingo-r {
+  width: 100%;
+  height: 100%;
+}
+
+.ive-logo .pingo-r {
+  background: var(--logo-frente, #fcfcfc);
+}
+
+.ive-logo .resto {
+  opacity: 0;
+}
+
+/* --- animada -------------------------------------------------------- */
+
+.ive-logo.anima {
+  animation: ive-lk var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .haste {
+  animation: ive-st var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .pingo {
+  animation: ive-dx var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .pingo-y {
+  animation: ive-dy var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .pingo-r {
+  animation: ive-dr var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .g-v {
+  animation: ive-t1 var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .ponto-2 {
+  animation: ive-t2 var(--dur, 6s) infinite;
+}
+
+.ive-logo.anima .g-e {
+  animation: ive-t3 var(--dur, 6s) infinite;
+}
+
+/*
+ * Modo "uma vez": os keyframes continuam sendo os de 6s, mas o React
+ * PAUSA a animação em ~3,1s, que é quando o E termina de entrar.
+ * Congelar é mais fiel do que reescrever os tempos — o desenho é seu,
+ * e recalcular 8 conjuntos de porcentagem só criaria chance de errar.
+ */
+.ive-logo.congelada,
+.ive-logo.congelada * {
+  animation-play-state: paused !important;
+}
+
+/* --- estática (cabeçalho, favicon, reduced-motion) ------------------- */
+
+.ive-logo.parada .resto {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .ive-logo.anima,
+  .ive-logo.anima * {
+    animation: none !important;
+  }
+
+  .ive-logo .resto {
+    opacity: 1;
+  }
+}
+
+/* --- keyframes: idênticos ao original -------------------------------- */
+
+@keyframes ive-lk {
+
+  0%,
+  22% {
+    transform: translateX(var(--cx));
+  }
+
+  32%,
+  97% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(var(--cx));
+  }
+}
+
+@keyframes ive-st {
+
+  0%,
+  3% {
+    transform: scaleY(0);
+    opacity: 1;
+  }
+
+  7%,
+  15% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+
+  21% {
+    transform: scaleY(.6);
+    animation-timing-function: cubic-bezier(.3, 0, .1, 1);
+  }
+
+  23% {
+    transform: scaleY(1.14);
+  }
+
+  26%,
+  92% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+
+  98%,
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+@keyframes ive-dx {
+
+  0%,
+  22% {
+    transform: translateX(var(--dx));
+    opacity: 0;
+  }
+
+  2%,
+  21% {
+    opacity: 1;
+  }
+
+  36%,
+  92% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  98%,
+  100% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+}
+
+@keyframes ive-dy {
+  0% {
+    transform: translateY(-340px);
+    animation-timing-function: cubic-bezier(.3, .6, .3, 1);
+  }
+
+  7%,
+  15% {
+    transform: translateY(var(--dy));
+  }
+
+  21%,
+  22% {
+    transform: translateY(calc(var(--dy) + var(--draw)));
+    animation-timing-function: cubic-bezier(.15, .7, .4, 1);
+  }
+
+  28% {
+    transform: translateY(-235px);
+    animation-timing-function: cubic-bezier(.5, 0, .75, .6);
+  }
+
+  36%,
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes ive-dr {
+
+  0%,
+  22% {
+    transform: rotate(0deg);
+  }
+
+  36% {
+    transform: rotate(360deg);
+  }
+
+  38% {
+    transform: rotate(360deg) scale(1.28, .78);
+  }
+
+  41%,
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes ive-t1 {
+
+  0%,
+  38% {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  46%,
+  92% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  98%,
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+@keyframes ive-t2 {
+
+  0%,
+  40% {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  49%,
+  92% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  98%,
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+@keyframes ive-t3 {
+
+  0%,
+  42% {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+
+  52%,
+  92% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  98%,
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+/* --- marca simples: só o "i" ---------------------------------------- */
+
+.ive-marca {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+
+.ive-marca span {
+  background: var(--logo-frente, #fcfcfc);
+  display: block;
+}
+
+/* --- palco da inicialização ------------------------------------------ */
+
+.ive-abertura {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--logo-fundo, #181922);
+  cursor: pointer;
+}
+
+.ive-abertura.saindo {
+  animation: ive-sair .45s ease forwards;
+}
+
+@keyframes ive-sair {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.ive-abertura .pular {
+  position: absolute;
+  bottom: 28px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #5c6070;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

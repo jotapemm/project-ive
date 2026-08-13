@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+logs/*.sqlite3
+dados/*
+!dados/.gitkeep
+!dados/clientes_agosto.xlsx
+.pytest_cache/
+.DS_Store
+Thumbs.db
+
+# interface
+ui/node_modules/
+ui/dist/
+ui/.vite/

@@ -1,0 +1,923 @@
+:root {
+  /*
+   * DUAS cores mandam em tudo. O tema.ts sobrescreve as duas em runtime —
+   * você escolhe o fundo, e o texto vem calculado pela luminância dele.
+   *
+   * Todo o resto abaixo é mistura entre essas duas. É por isso que trocar
+   * o fundo repinta a interface inteira, e é por isso que não existe uma
+   * lista de cores por tema pra alguém esquecer de atualizar.
+   */
+  --fundo: #0d0d13;
+  --texto: #f2f2f7;
+
+  --painel:      color-mix(in srgb, var(--fundo) 93%, var(--texto));
+  --item:        color-mix(in srgb, var(--fundo) 88%, var(--texto));
+  --item-quente: color-mix(in srgb, var(--fundo) 80%, var(--texto));
+  --borda:       color-mix(in srgb, var(--fundo) 84%, var(--texto));
+  /* As proporções destes dois vêm do tema.ts e mudam conforme o fundo
+     seja claro ou escuro — ver o comentário lá. Os valores abaixo são só
+     o fallback pro caso do JS não ter rodado ainda. */
+  --fraco:       color-mix(in srgb, var(--texto) var(--mix-fraco, 68%), var(--fundo));
+  --apagado:     color-mix(in srgb, var(--texto) var(--mix-apagado, 52%), var(--fundo));
+
+  /* As cores de sinal também misturam com o texto: num fundo claro elas
+     escurecem sozinhas, senão sumiriam. */
+  --acento: color-mix(in srgb, #8257f5 74%, var(--texto));
+  --ok:     color-mix(in srgb, #2fa85b 74%, var(--texto));
+  --alerta: color-mix(in srgb, #c9821a 76%, var(--texto));
+  --erro:   color-mix(in srgb, #d64545 76%, var(--texto));
+
+  --logo-fundo: var(--fundo);
+  --logo-frente: var(--texto);
+
+  --raio: 14px;
+
+  /* Um tempo só para o recolhimento da barra. A área principal segue o
+     mesmo relógio porque é o próprio layout que a move — mexer aqui muda
+     os dois de uma vez, e eles nunca saem de sincronia. */
+  --tempo-barra: .38s;
+  --curva-barra: cubic-bezier(.22, 1, .36, 1);
+
+  /* A FONTE DA LOGO mora aqui e só aqui.
+     Trocar = mudar estas duas linhas + o <link> no index.html.
+     Compare as opções lado a lado em /fontes.html antes de decidir. */
+  --fonte-logo: "Anton", ui-sans-serif, system-ui;
+  --peso-logo: 400;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  /* Suaviza a troca de tema em vez de piscar de uma cor pra outra. */
+  transition: background-color .28s ease, color .28s ease;
+}
+
+/* --- cascata: aparição escalonada, no espírito do iOS ---------------- */
+
+@keyframes ive-cascata {
+  from { opacity: 0; transform: translateY(9px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/*
+ * `backwards` é o que faz virar cascata e não pisca-pisca: durante o
+ * atraso o item já fica no estado inicial (invisível), em vez de aparecer
+ * inteiro e só então começar a animar.
+ *
+ * A curva tem um leve passar-do-ponto no fim — é o "pop" que o iOS dá.
+ */
+.cascata > * {
+  animation: ive-cascata .5s cubic-bezier(.21, 1.28, .36, 1) backwards;
+  animation-delay: calc(var(--passo, 0) * 55ms);
+}
+
+/*
+ * Na área de rolagem os itens entram em TRÊS ondas, agrupados por seção,
+ * e não um por um: são 8 elementos, e escalonar todos daria quase meio
+ * segundo de atraso acumulado — deixaria de parecer fluido e passaria a
+ * parecer lento. As ondas continuam a contagem dos 3 itens do menu.
+ */
+.rolagem.cascata > * { --passo: 3; }
+.rolagem.cascata > *:nth-child(n + 3) { --passo: 4; }
+.rolagem.cascata > *:nth-child(n + 6) { --passo: 5; }
+
+@media (prefers-reduced-motion: reduce) {
+  body { transition: none; }
+  .cascata > * { animation: none; }
+}
+
+code,
+pre,
+textarea,
+select {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+.janela {
+  display: flex;
+  height: 100vh;
+  gap: 0;
+  padding: 12px;
+}
+
+/* --- barra lateral --------------------------------------------------- */
+
+/*
+ * O recolhimento antes estava seco, e o motivo era simples: `width: auto`
+ * não transiciona. O navegador não tem como interpolar até um valor que
+ * ele só descobre depois de fazer o layout.
+ *
+ * Com largura e altura EXPLÍCITAS nos dois estados, os dois animam. E
+ * como a área principal é `flex: 1`, ela recalcula a cada quadro junto —
+ * então a caixa de texto desliza para a esquerda no mesmo tempo, sem
+ * precisar de uma segunda animação para sincronizar.
+ *
+ * `align-self: flex-start` fixo (e não só no recolhido) é o que permite a
+ * altura ser uma propriedade animável em vez de vir do `stretch` do pai.
+ */
+.barra {
+  width: 278px;
+  height: 100%;
+  flex: none;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 12px;
+  overflow: hidden;
+  transition:
+    width var(--tempo-barra) var(--curva-barra),
+    height var(--tempo-barra) var(--curva-barra),
+    padding var(--tempo-barra) var(--curva-barra),
+    background-color var(--tempo-barra) ease,
+    border-color var(--tempo-barra) ease;
+}
+
+/* O conteúdo some antes da caixa terminar de encolher — se sumisse junto,
+   dava pra ver texto sendo espremido no meio do caminho. */
+.barra > *:not(.hamburguer) {
+  transition: opacity calc(var(--tempo-barra) * .45) ease, visibility 0s;
+}
+
+/*
+ * Recolhido = só o ≡ no canto.
+ *
+ * Antes encolhia só na horizontal e sobrava uma coluna estreita e alta
+ * ocupando a tela toda. `align-self: flex-start` é o que solta a barra do
+ * `stretch` do flex pai e deixa ela ter a altura do próprio conteúdo.
+ */
+/* 36 = os 34px do botão + 1px de borda de cada lado. */
+.barra.recolhida {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+}
+
+/* opacity em vez de `display: none`: display é instantâneo e faz o
+   conteúdo sumir de estalo. O `overflow: hidden` da barra é quem recorta
+   o que sobra enquanto a caixa encolhe. A visibilidade só desliga DEPOIS
+   do fade, senão o teclado ainda alcançaria o que está invisível. */
+.barra.recolhida > *:not(.hamburguer) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity calc(var(--tempo-barra) * .45) ease,
+    visibility 0s calc(var(--tempo-barra) * .45);
+}
+
+.barra.recolhida .hamburguer {
+  margin-bottom: 0;
+}
+
+.hamburguer {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--item);
+  color: var(--fraco);
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  font-size: 15px;
+  margin-bottom: 18px;
+}
+
+.hamburguer:hover {
+  color: var(--texto);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--item);
+  color: var(--fraco);
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.item-nav:hover:not(:disabled) {
+  background: var(--item-quente);
+  color: var(--texto);
+}
+
+.item-nav:disabled {
+  opacity: .45;
+}
+
+.item-nav .icone {
+  width: 14px;
+  flex: none;
+  color: var(--apagado);
+  font-size: 12px;
+  text-align: center;
+}
+
+.rolagem {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 18px;
+  min-height: 0;
+}
+
+.rolagem::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rolagem::-webkit-scrollbar-thumb {
+  background: var(--item-quente);
+  border-radius: 4px;
+}
+
+.secao {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--fraco);
+  margin: 0 0 6px;
+  padding-left: 4px;
+}
+
+.rolagem .secao:not(:first-child) {
+  margin-top: 22px;
+}
+
+.dica,
+.vazio {
+  font-size: 11px;
+  color: var(--apagado);
+  margin: 0 0 10px;
+  padding-left: 4px;
+  line-height: 1.45;
+}
+
+.acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.acoes button {
+  text-align: left;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--fraco);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.acoes button:hover {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.cardapio {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cardapio li {
+  padding: 3px 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cardapio code {
+  font-size: 11.5px;
+  color: var(--apagado);
+}
+
+.cardapio .escrita {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--alerta);
+  border: 1px solid var(--alerta);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.rodape-barra {
+  border-top: 1px solid var(--borda);
+  padding-top: 10px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.linha {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--fraco);
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.linha:hover:not(:disabled) {
+  background: var(--item);
+  color: var(--texto);
+}
+
+.linha:disabled {
+  opacity: .5;
+}
+
+.linha.aberta {
+  background: var(--item);
+  color: var(--texto);
+}
+
+.linha .icone {
+  width: 14px;
+  flex: none;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* --- painel de personalização ---------------------------------------- */
+
+.tema {
+  background: var(--item);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.tema h3 {
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--apagado);
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+
+.amostras {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+/* Cada amostra mostra o fundo E a letra na cor de texto que ele vai
+   gerar — dá pra ver o contraste antes de escolher. */
+.amostras button {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  font-family: var(--fonte-logo, sans-serif);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  transition: transform .16s cubic-bezier(.21, 1.28, .36, 1), border-color .16s ease;
+}
+
+.amostras button:hover {
+  transform: scale(1.1);
+}
+
+.amostras button.escolhido {
+  border-color: var(--acento);
+  border-width: 2px;
+}
+
+.livre {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--fraco);
+  cursor: pointer;
+}
+
+.livre input {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.livre input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.livre input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
+/* --- voz -------------------------------------------------------------- */
+
+.alternar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11.5px;
+  color: var(--fraco);
+  cursor: pointer;
+  margin-bottom: 9px;
+}
+
+.alternar input {
+  accent-color: var(--acento);
+  margin: 0;
+  flex: none;
+}
+
+.seletor-voz {
+  width: 100%;
+  background: var(--fundo);
+  color: var(--texto);
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  padding: 5px 7px;
+  font-size: 11.5px;
+  outline: none;
+}
+
+.ritmo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--fraco);
+}
+
+.ritmo input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--acento);
+}
+
+.ritmo b {
+  color: var(--texto);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.testar {
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  color: var(--fraco);
+  border: 1px solid var(--borda);
+  border-radius: 7px;
+  padding: 5px;
+  font-size: 11.5px;
+}
+
+.testar:hover {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.rodape-balao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ouvir {
+  flex: none;
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--apagado);
+  font-size: 9px;
+  opacity: 0;
+  transition: opacity .15s ease, color .15s ease, border-color .15s ease;
+}
+
+/* Só aparece no hover do balão: o botão é atalho, não decoração
+   permanente em toda resposta. */
+.balao.ive:hover .ouvir,
+.ouvir:focus-visible {
+  opacity: 1;
+}
+
+.ouvir:hover {
+  color: var(--acento);
+  border-color: var(--acento);
+}
+
+.usuario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--item);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 7px 10px;
+  color: var(--fraco);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.usuario:disabled {
+  opacity: .7;
+}
+
+.avatar {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--item-quente);
+  border: 1px solid var(--borda);
+}
+
+/* --- área principal -------------------------------------------------- */
+
+.principal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 24px;
+}
+
+.principal.hero {
+  align-items: center;
+  justify-content: center;
+}
+
+.centro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 34px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.conversa {
+  flex: 1;
+  overflow-y: auto;
+  padding: 26px 0;
+}
+
+.conversa,
+.ancora {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.ancora {
+  padding-bottom: 22px;
+}
+
+.balao {
+  margin-bottom: 20px;
+}
+
+.balao.voce {
+  background: var(--item);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-left: auto;
+  max-width: 78%;
+  width: fit-content;
+}
+
+.balao .texto {
+  white-space: pre-wrap;
+}
+
+.balao.erro {
+  color: var(--erro);
+  font-size: 13px;
+}
+
+.balao pre {
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  overflow-x: auto;
+  max-height: 320px;
+  margin: 6px 0 0;
+}
+
+.etiqueta {
+  display: block;
+  font-size: 10.5px;
+  color: var(--apagado);
+  margin-top: 6px;
+}
+
+.pensando {
+  color: var(--apagado);
+  font-size: 12.5px;
+}
+
+/* --- caixa de entrada ------------------------------------------------ */
+
+.caixa {
+  width: 100%;
+  background: var(--item);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 12px 14px 8px;
+}
+
+.caixa:focus-within {
+  border-color: var(--item-quente);
+}
+
+.caixa textarea {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--texto);
+  font-size: 13.5px;
+  resize: none;
+  min-height: 24px;
+  max-height: 200px;
+  outline: none;
+}
+
+.caixa textarea::placeholder {
+  color: var(--apagado);
+}
+
+.pe {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.marca-pe {
+  color: var(--apagado);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controles select {
+  background: transparent;
+  border: 0;
+  color: var(--fraco);
+  font-size: 11.5px;
+  outline: none;
+}
+
+.controles select option {
+  background: var(--painel);
+}
+
+.voz,
+.enviar {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--borda);
+  background: transparent;
+  color: var(--fraco);
+  font-size: 13px;
+}
+
+.enviar:not(:disabled) {
+  background: var(--acento);
+  color: #14121f;
+  border-color: transparent;
+}
+
+.voz:disabled,
+.enviar:disabled {
+  opacity: .4;
+}
+
+/* Enquanto o microfone está aberto o botão pulsa. O usuário precisa
+   ENXERGAR que está gravando — não dá pra depender de ele lembrar que
+   está com o dedo no botão. */
+.voz.gravando {
+  background: var(--erro);
+  border-color: transparent;
+  color: #fff;
+  animation: ive-gravando 1.1s ease-in-out infinite;
+}
+
+.voz.ouvindo {
+  opacity: .7;
+}
+
+@keyframes ive-gravando {
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--erro) 30%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voz.gravando { animation: none; }
+}
+
+/* --- conversa por voz ------------------------------------------------ */
+
+.modo-voz {
+  position: fixed;
+  inset: 0;
+  background: var(--fundo);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* A tela inteira é o botão de falar: segurar em qualquer lugar grava. */
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  animation: ive-entra-voz .5s cubic-bezier(.16, 1, .3, 1);
+}
+
+@keyframes ive-entra-voz {
+  from { opacity: 0; }
+}
+
+/* O canvas ocupa tudo — a esfera se posiciona por dentro dele, senão
+   a conta da perspectiva teria que saber do layout de fora. */
+.esfera {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sair-voz {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--apagado);
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.sair-voz:hover {
+  color: var(--texto);
+  border-color: var(--fraco);
+}
+
+.legendas {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%);
+  width: min(620px, 82vw);
+  text-align: center;
+  pointer-events: none;
+}
+
+.legendas .dito {
+  color: var(--fraco);
+  font-size: 13px;
+  margin: 0 0 10px;
+  font-style: italic;
+}
+
+.legendas .resposta-voz {
+  color: var(--texto);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+  /* Resposta longa não pode empurrar a esfera nem virar parede de texto:
+     a tela de voz é pra ouvir, o texto aqui é confirmação. */
+  max-height: 8.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(#000 72%, transparent);
+}
+
+.legendas .erro {
+  color: var(--erro);
+  font-size: 12.5px;
+  margin: 8px 0 0;
+}
+
+.rotulo-voz {
+  position: absolute;
+  bottom: 42px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--apagado);
+  transition: color .2s ease;
+}
+
+.modo-voz.gravando .rotulo-voz { color: var(--erro); }
+.modo-voz.falando .rotulo-voz { color: var(--acento); }
+
+/* --- servidor fora do ar --------------------------------------------- */
+
+.erro-inicial {
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--fraco);
+}
+
+.erro-inicial .marca-centrada {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 26px;
+}
+
+.erro-inicial pre {
+  text-align: left;
+  max-width: 620px;
+  margin: 22px auto;
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .janela {
+    flex-direction: column;
+    height: auto;
+  }
+
+  /* Empilhado, a barra ocupa a largura toda e a altura vem do conteúdo.
+     `height: 100%` não resolveria aqui — a janela não tem altura definida
+     neste layout, e a barra ficaria com 0 de altura. */
+  .barra {
+    width: auto;
+    height: auto;
+    align-self: stretch;
+  }
+
+  .barra.recolhida {
+    width: 36px;
+    height: 36px;
+    align-self: flex-start;
+  }
+
+  .principal {
+    padding: 20px 0 0;
+  }
+}
