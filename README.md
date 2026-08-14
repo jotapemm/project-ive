@@ -346,6 +346,37 @@ justa. Hoje: **Anton**.
 └── tests/                   34 testes, nenhum gasta API
 ```
 
+### Onde este repositório fica
+
+Ele é uma das duas pastas dentro de `.IVE/`, que não é repositório nenhum —
+é só a gaveta que guarda as duas:
+
+```
+.IVE/
+├── project-ive/        este repositório — o motor e o produto
+└── landing-page-ive/   a vitrine, repositório separado
+```
+
+As três partes têm papéis separados e nenhuma importa código da outra:
+
+| pasta                       | o que é   | como vive               |
+| --------------------------- | --------- | ----------------------- |
+| `project-ive/ive/`          | o motor   | Python, este repo       |
+| `project-ive/ui/`           | o produto | Vite + React, este repo |
+| `landing-page-ive/`         | a vitrine | Next.js, repo separado  |
+
+**O contrato entre a vitrine e o produto é uma URL, e só.** A landing tem
+uma caixa igual à do app; ao enviar, ela navega para
+`NEXT_PUBLIC_IVE_URL/?q=<pergunta>`. Deste lado, `ui/src/App.tsx` lê o `?q=`,
+preenche a caixa, põe o cursor no fim e apaga o parâmetro da URL — sem isso
+um F5 ressuscitaria a pergunta antiga por cima do que a pessoa escreveu.
+
+Ela não envia sozinha: execução custa token e o servidor pode estar fora do
+ar, então quem aperta enter é a pessoa.
+
+Se mexer no formato desse parâmetro, os dois repositórios precisam mudar
+juntos — é o único ponto onde eles se tocam.
+
 ## Adicionar uma ferramenta
 
 ```python

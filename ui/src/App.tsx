@@ -22,6 +22,31 @@ import { ModoVoz } from "./ModoVoz";
 
 const JA_ABRIU = "ive-abriu";
 
+/**
+ * A pergunta que veio da landing, em `?q=`.
+ *
+ * O site institucional (site/) tem uma caixa igual a esta. Quem escreve lá
+ * é trazido pra cá com o texto junto, e reencontra a frase na mesma caixa —
+ * a passagem não parece troca de site, parece a conversa continuando.
+ *
+ * Ela NÃO é enviada sozinha. Toda execução custa tokens e pode esbarrar no
+ * servidor fora do ar; quem aperta enter é a pessoa.
+ *
+ * O parâmetro é apagado da barra de endereço depois de lido: sem isso, um
+ * F5 ressuscitaria a pergunta antiga por cima do que o usuário já estivesse
+ * escrevendo.
+ */
+function lerPergunta(): string {
+  try {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (!q) return "";
+    window.history.replaceState({}, "", window.location.pathname);
+    return q.slice(0, 2000); // teto: ninguém cola um livro na barra de endereço
+  } catch {
+    return "";
+  }
+}
+
 type Mensagem =
   | { tipo: "voce"; texto: string }
   | { tipo: "ive"; texto: string; meta: api.Resultado }
@@ -39,6 +64,9 @@ export default function App() {
   const [vozPref, setVozPref] = useState(voz.carregar);
   const [vozes, setVozes] = useState<SpeechSynthesisVoice[]>([]);
   const [modoVoz, setModoVoz] = useState(false);
+
+  // Uma vez só, no primeiro render — a função já limpa a URL ao ler.
+  const [daLanding] = useState(lerPergunta);
 
   // A lista de vozes chega assíncrona — ver o comentário em voz.ts.
   useEffect(() => {
@@ -138,6 +166,7 @@ export default function App() {
             aoEnviar={enviar}
             aoFalar={falar}
             aoEntrarNaVoz={() => setModoVoz(true)}
+            daLanding={daLanding}
           />
         </div>
       )}
@@ -419,6 +448,7 @@ function Principal({
   aoEnviar,
   aoFalar,
   aoEntrarNaVoz,
+  daLanding,
 }: {
   saude: api.Saude | null;
   mensagens: Mensagem[];
@@ -428,6 +458,7 @@ function Principal({
   aoEnviar: (t: string) => void;
   aoFalar: (t: string) => void;
   aoEntrarNaVoz: () => void;
+  daLanding: string;
 }) {
   const vazio = mensagens.length === 0;
   const fim = useRef<HTMLDivElement>(null);
@@ -444,6 +475,7 @@ function Principal({
       aoTrocarMotor={aoTrocarMotor}
       aoEnviar={aoEnviar}
       aoEntrarNaVoz={aoEntrarNaVoz}
+      inicial={daLanding}
     />
   );
 
@@ -516,6 +548,7 @@ function Caixa({
   aoTrocarMotor,
   aoEnviar,
   aoEntrarNaVoz,
+  inicial = "",
 }: {
   saude: api.Saude | null;
   motor: string;
@@ -523,8 +556,24 @@ function Caixa({
   aoTrocarMotor: (m: string) => void;
   aoEnviar: (t: string) => void;
   aoEntrarNaVoz: () => void;
+  /** Pergunta trazida da landing por `?q=`. Vazia no uso normal. */
+  inicial?: string;
 }) {
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto] = useState(inicial);
+  const area = useRef<HTMLTextAreaElement>(null);
+
+  /*
+   * Chegou da landing: põe o cursor no fim do texto, pronto pra continuar
+   * escrevendo ou só apertar enter. Sem o `setSelectionRange` o Chrome
+   * deixa o cursor no começo da frase, o que é o oposto do esperado.
+   */
+  useEffect(() => {
+    if (!inicial) return;
+    const el = area.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(inicial.length, inicial.length);
+  }, [inicial]);
 
   function mandar() {
     if (!texto.trim() || rodando) return;
@@ -535,6 +584,7 @@ function Caixa({
   return (
     <div className="caixa">
       <textarea
+        ref={area}
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={(e) => {

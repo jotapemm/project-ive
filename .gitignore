@@ -1,4 +1,5 @@
 .env
+.env.example
 __pycache__/
 *.py[cod]
 .venv/
@@ -10,8 +11,15 @@ dados/*
 .pytest_cache/
 .DS_Store
 Thumbs.db
+.claude/
 
 # interface
 ui/node_modules/
 ui/dist/
 ui/.vite/
+
+# A landing NÃO precisa de linha aqui.
+#
+# Ela mora em ../landing-page-ive, IRMÃ desta pasta e não filha, com o
+# próprio repositório. Como está fora da raiz deste repo, o git daqui nem
+# enxerga a existência dela.
