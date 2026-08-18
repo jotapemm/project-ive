@@ -1,32 +1,41 @@
 /**
  * Voz do IVE — o lado de FALAR.
  *
- * Usa a síntese do próprio Windows via `speechSynthesis`. Zero download,
- * zero servidor, e o texto não sai da máquina: as vozes daqui reportam
- * `localService: true`, ou seja, sintetizam localmente.
+ * Piper: rede neural (VITS) rodando no servidor local. O texto não sai da
+ * máquina.
  *
- * Ponto de arquitetura que vale repetir: **isto não é ferramenta.** Não
- * entra no `registry`. O cardápio é o que o MODELO pode pedir, e se
- * `falar()` virasse ferramenta o modelo passaria a decidir sozinho quando
- * abrir a caixa de som do escritório. Falar é decisão da interface.
+ * Aqui já existiu um segundo motor, a síntese do próprio Windows via
+ * `speechSynthesis`. Foi removida por soar robótica, e o motivo é técnico:
+ * ela é **concatenativa** — pedaços de áudio gravados e costurados,
+ * tecnologia dos anos 90. Não havia ajuste que resolvesse; era o método.
  *
- * Fase 2 (ouvir, com Whisper local) mora noutro lugar, porque precisa de
- * servidor. Esta camada é só navegador.
+ * O que se perdeu com isso: latência zero e funcionar sem servidor. Como
+ * ouvir (Whisper) já exigia o servidor, a voz inteira já dependia dele —
+ * então não é uma dependência nova, é a mesma.
+ *
+ * Ponto de arquitetura que vale repetir: isto NÃO é ferramenta. Não entra
+ * no `registry`. O cardápio é o que o MODELO pode pedir, e se `falar()`
+ * virasse ferramenta o modelo decidiria sozinho quando abrir a caixa de
+ * som do escritório. Falar é decisão da interface.
  */
 
 export type Preferencias = {
   auto: boolean;   // fala sozinho quando o IVE responde
-  vozURI: string;  // qual voz do sistema
-  ritmo: number;   // 0.5 a 2
+  voz: string;     // nome do .onnx; vazio = o padrão do servidor
+  ritmo: number;
 };
 
 const CHAVE = "ive-voz";
 
-export const PADRAO: Preferencias = { auto: false, vozURI: "", ritmo: 1.05 };
+export const PADRAO: Preferencias = { auto: false, voz: "", ritmo: 1.05 };
 
 export function carregar(): Preferencias {
   try {
-    return { ...PADRAO, ...JSON.parse(localStorage.getItem(CHAVE) || "{}") };
+    const cru = JSON.parse(localStorage.getItem(CHAVE) || "{}");
+    // Quem já usava o sistema tem 'vozPiper' guardado, do tempo em que
+    // havia dois motores. Aproveita em vez de resetar a escolha.
+    if (!cru.voz && cru.vozPiper) cru.voz = cru.vozPiper;
+    return { ...PADRAO, auto: !!cru.auto, voz: cru.voz ?? "", ritmo: cru.ritmo ?? PADRAO.ritmo };
   } catch {
     return { ...PADRAO };
   }
@@ -40,39 +49,12 @@ export function guardar(p: Preferencias): void {
   }
 }
 
-export const suportado = (): boolean =>
-  typeof window !== "undefined" && "speechSynthesis" in window;
-
-/**
- * A lista de vozes chega assíncrona na primeira chamada — `getVoices()`
- * volta vazio e o evento `voiceschanged` avisa depois. Quem chamar uma vez
- * só e acreditar no vazio conclui que não tem voz nenhuma.
- */
-export function vozes(): Promise<SpeechSynthesisVoice[]> {
-  if (!suportado()) return Promise.resolve([]);
-  const jaTem = speechSynthesis.getVoices();
-  if (jaTem.length) return Promise.resolve(jaTem);
-
-  return new Promise((ok) => {
-    const responder = () => ok(speechSynthesis.getVoices());
-    speechSynthesis.addEventListener("voiceschanged", responder, { once: true });
-    setTimeout(responder, 2000); // rede de segurança: o evento pode não vir
-  });
-}
-
-/** Só as de português, com as do Brasil na frente. */
-export function vozesPtBr(todas: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
-  return todas
-    .filter((v) => /^pt/i.test(v.lang))
-    .sort((a, b) => Number(/br/i.test(b.lang)) - Number(/br/i.test(a.lang)));
-}
-
 /**
  * Quebra em frases antes de falar.
  *
- * Não é capricho: o Chrome corta a fala por volta de 15 segundos quando a
- * frase é longa demais. Enfileirar frases curtas evita isso, e de quebra
- * dá uma pausa natural na pontuação.
+ * É ganho de LATÊNCIA: o Piper cobra ~330 ms fixos por chamada, então ele
+ * toca a primeira frase enquanto a segunda ainda está sendo gerada, em vez
+ * de esperar o texto inteiro ficar pronto.
  */
 function emFrases(texto: string): string[] {
   return texto
@@ -97,48 +79,102 @@ export function limpar(texto: string): string {
     .trim();
 }
 
-export function calar(): void {
-  if (suportado()) speechSynthesis.cancel();
+/* --- reprodução ------------------------------------------------------- */
+
+let tocando: HTMLAudioElement | null = null;
+
+/*
+ * Sobe a cada calar(). Uma fala antiga que ainda estava buscando áudio
+ * compara este número e desiste — sem isso, cancelar e mandar outra coisa
+ * faria as duas tocarem juntas alguns instantes depois.
+ */
+let geracao = 0;
+
+async function baixarFrase(
+  frase: string,
+  pref: Preferencias,
+  sinal: AbortSignal,
+): Promise<string> {
+  const r = await fetch("/api/voz/falar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      texto: frase,
+      voz: pref.voz || null,
+      // No Piper o ritmo é `length_scale`: MAIOR = mais devagar. Invertemos
+      // aqui pra que o controle na interface signifique o de sempre —
+      // deslizar pra direita acelera.
+      ritmo: pref.ritmo ? 1 / pref.ritmo : null,
+    }),
+    signal: sinal,
+  });
+  if (!r.ok) throw new Error(`Piper falhou (${r.status})`);
+  return URL.createObjectURL(await r.blob());
 }
 
-export const falando = (): boolean =>
-  suportado() && (speechSynthesis.speaking || speechSynthesis.pending);
+function tocar(url: string, sinal: AbortSignal): Promise<void> {
+  return new Promise((pronto) => {
+    const som = new Audio(url);
+    tocando = som;
+    let fechado = false;
+    const fim = () => {
+      if (fechado) return;
+      fechado = true;
+      URL.revokeObjectURL(url);
+      if (tocando === som) tocando = null;
+      pronto();
+    };
+    som.onended = fim;
+    som.onerror = fim;
+    sinal.addEventListener("abort", () => { som.pause(); fim(); }, { once: true });
+    som.play().catch(fim);
+  });
+}
+
+/* --- interface pública ------------------------------------------------ */
+
+export function calar(): void {
+  geracao++;
+  if (tocando) {
+    tocando.pause();
+    tocando = null;
+  }
+}
+
+export const falando = (): boolean => !!tocando && !tocando.paused;
 
 /**
  * Fala. Resolve quando termina, ou quando é interrompido por outra fala.
  * Nunca rejeita: falha de voz não deve derrubar a tela.
  */
-export function falar(
-  texto: string,
-  pref: Preferencias,
-  vozesDisponiveis: SpeechSynthesisVoice[],
-): Promise<void> {
-  if (!suportado()) return Promise.resolve();
-
+export async function falar(texto: string, pref: Preferencias): Promise<void> {
   const frases = emFrases(limpar(texto));
-  if (!frases.length) return Promise.resolve();
+  if (!frases.length) return;
 
   calar(); // uma fala de cada vez
 
-  const escolhida =
-    vozesDisponiveis.find((v) => v.voiceURI === pref.vozURI) ??
-    vozesPtBr(vozesDisponiveis)[0];
+  const minha = geracao;
+  const corte = new AbortController();
+  const cancelado = () => geracao !== minha;
 
-  return new Promise((pronto) => {
-    frases.forEach((frase, i) => {
-      const fala = new SpeechSynthesisUtterance(frase);
-      if (escolhida) {
-        fala.voice = escolhida;
-        fala.lang = escolhida.lang;
-      } else {
-        fala.lang = "pt-BR";
-      }
-      fala.rate = pref.ritmo;
-      if (i === frases.length - 1) {
-        fala.onend = () => pronto();
-        fala.onerror = () => pronto();
-      }
-      speechSynthesis.speak(fala);
-    });
-  });
+  // Busca a PRÓXIMA enquanto a atual toca. É isso que tira a pausa entre
+  // frases — sem o adiantamento, cada uma pagaria a latência de novo.
+  let proxima = baixarFrase(frases[0], pref, corte.signal);
+
+  for (let i = 0; i < frases.length; i++) {
+    if (cancelado()) { corte.abort(); return; }
+
+    let url: string;
+    try {
+      url = await proxima;
+    } catch {
+      return; // servidor fora, voz não baixada — silêncio é melhor que erro
+    }
+    if (cancelado()) { URL.revokeObjectURL(url); corte.abort(); return; }
+
+    if (i + 1 < frases.length) {
+      proxima = baixarFrase(frases[i + 1], pref, corte.signal).catch(() => "");
+    }
+    await tocar(url, corte.signal);
+  }
 }

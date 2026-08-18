@@ -149,10 +149,11 @@ O ponto de arquitetura mais importante do servidor:
 Mandar um clique de botão pra uma IA interpretar é mais lento, mais caro e
 pode errar.
 
-Na interface: o que passa pelo modelo entra pela **caixa de texto**; o que
-não passa são os **botões da barra lateral**. As respostas caem na mesma
-conversa, mas as diretas vêm etiquetadas (`direto · inspecionar_coluna`) —
-assim a distinção continua visível sem precisar de duas colunas.
+Na interface, hoje, só a **caixa de texto** tem gatilho: a chamada direta
+existe no `api.ts` (`chamarFerramenta`) e no servidor, mas os botões que a
+disparavam saíram da barra lateral — ocupavam a barra inteira e ninguém
+usava. A conversa ainda sabe **exibir** uma resposta direta, etiquetada
+(`direto · inspecionar_coluna`); o que falta é quem a peça.
 
 ---
 
@@ -202,6 +203,145 @@ escrever isso na tela.
 Detalhe de desempenho: o gargalo não é o número de pontos, é trocar
 `fillStyle` 2600 vezes por quadro. Os pontos são agrupados em 7 baldes de
 opacidade, então são 7 trocas de estado.
+
+### Falar — Piper
+
+Rede neural (VITS) rodando aqui. O texto nao sai da maquina.
+
+```
+"confere a planilha"  →  eSpeak-ng  →  /kõˈfɛɾi a plɐˈniʎɐ/  →  VITS/ONNX  →  🔊
+```
+
+Roda rapido na CPU porque a arquitetura e enxuta e o modelo e executado
+pelo onnxruntime — o mesmo que ja estava aqui por causa do Whisper.
+
+**Medido nesta maquina (i3, sem GPU):**
+
+| texto | audio gerado | tempo | fator |
+|---|---|---|---|
+| 7 car. | 0,48 s | 0,38 s | 1,2x |
+| 49 car. | 2,47 s | 0,51 s | 4,8x |
+| 97 car. | 5,84 s | 0,78 s | **7,5x** |
+
+Ha um custo fixo de ~0,3 s por chamada; frase longa dilui. Por isso o
+`voz.ts` quebra o texto em frases e **busca a proxima enquanto a atual
+toca** — sem esse adiantamento, cada frase pagaria a latencia de novo.
+
+**Duas vozes no seletor**, uma de cada motor. E o seletor mostra so
+**"Masculina" e "Feminina"** — nome proprio de voz interessa a quem monta
+a voz, nao a quem escolhe uma. Os arquivos em disco mantem os nomes.
+
+Medido nesta maquina com a MESMA frase (~4 s de audio), modelo ja quente:
+
+| no seletor | arquivo | motor | sintese | fator |
+|---|---|---|---|---|
+| **Masculina** | `pt_BR-faber-medium` | piper | **0,23 s** | **16,5x** |
+| Feminina | `pf_bella` | kokoro | 16,5 s | 0,26x |
+
+### A voz feminina e montada
+
+**Nao existe voz feminina em portugues no Piper.** As quatro (cadu,
+edresson, faber, jeff) sao masculinas e de locutor unico; nao ha modelo
+multi-locutor em pt no catalogo. O Kokoro tem tres em pt e so a `pf_dora`
+e feminina. Esse e o catalogo inteiro de voz local em pt-BR — e a Dora
+sozinha nao passava no ouvido.
+
+A saida veio em dois niveis. Vale ler os dois: **o primeiro nao resolve
+sem o segundo.**
+
+**Nivel 1 — o vetor de estilo tem duas metades.** O Kokoro e StyleTTS2, e
+os 256 numeros do vetor nao sao um bloco so: a primeira metade alimenta o
+decodificador (o TIMBRE) e a segunda alimenta o preditor de duracao e F0
+(o RITMO e a entonacao, que e onde mora o sotaque). Medido trocando as
+metades e cronometrando a saida:
+
+| vetor | duracao | F0 |
+|---|---|---|
+| af_bella | 7,88 s | 205 Hz |
+| pf_dora | 6,22 s | 175 Hz |
+| 1a bella + 2a dora | **6,22 s** | **180 Hz** |
+| 1a dora + 2a bella | 7,88 s | 195 Hz |
+
+Duracao e pitch seguem a segunda metade, exatamente. Entao da pra costurar
+o timbre de uma no ritmo da outra — e e isso que a `pf_bella` e:
+
+```python
+nova = bella.copy()
+nova[:, :, 128:] = dora[:, :, 128:]   # timbre da Bella, ritmo da Dora
+```
+
+Somar os vetores INTEIROS (`bella * 0.5 + dora * 0.5`), que foi a primeira
+tentativa, borra as duas coisas juntas: perde timbre pra ganhar ritmo. A
+metade a metade nao tem esse compromisso.
+
+**Nivel 2 — os fonemas.** O eSpeak escreve o portugues com simbolos que a
+Dora viu em treino e a Bella nunca. Pra ela cada um aponta pro som INGLES:
+
+```
+planilha   plˌænˈiljæ     "lh" vira l+j ("planilhia"), e o final e o [æ] de "cat"
+tres       trˈes          r comum, quando em pt e TAP
+carro      kˈaxʊ          [x] nao existe em ingles
+porta      pˈɔɾətæ        o espeak enfia um schwa: "po-ro-ta"
+```
+
+O conserto e reescrever a fonemizacao com simbolos cuja leitura inglesa
+cai no som certo — o `ɾ` que ela conhece do "butter" americano e o mesmo
+tap do "tres". A lista mora em `_CONSERTOS`, no `fala.py`, e e **amarrada
+a voz** (`_TIMBRE_ESTRANGEIRO`): numa voz nativa o mesmo conserto
+estragaria a fala.
+
+> **Correcao de um diagnostico errado que ficou aqui por semanas.** Este
+> README dizia que o til combinante U+0303 nao estava no vocabulario do
+> tokenizador, e que era por isso que "nao" e "entao" saiam tortos. Fomos
+> conferir: **U+0303 esta no vocabulario**, e na frase de teste inteira
+> nenhum fonema e descartado. A causa era outra — a de cima.
+
+Candidatas ja baixadas ficam em `vozes/kokoro/candidatas/` — em disco, mas
+fora do seletor. **Adicionar uma voz e mover o arquivo uma pasta pra cima:**
+
+```
+mv vozes/kokoro/candidatas/af_heart.bin vozes/kokoro/
+```
+
+O `fala.py` varre `.bin` soltos, entao nao ha nada pra reempacotar. A 2a
+letra do nome diz o genero (`af_` = feminina americana, `bf_` = britanica,
+`pf_` = portuguesa) — e e so isso que o seletor precisa saber.
+
+### O preco da voz feminina
+
+Ela custa **~70x** o Faber pra dizer a mesma frase: 16,5 s contra 0,23 s.
+A interface avisa ao escolher.
+
+Este numero corrige o que estava aqui antes (0,8x de fator, "20x mais
+lento"). Aquilo vinha de uma medicao com frase curta e modelo recem-usado;
+repetida quatro vezes com a mesma frase, a taxa fica em 0,26x — estavel, e
+sem diferenca perceptivel com ou sem o servidor de desenvolvimento junto.
+
+Onde ela serve: **frase curta, e audio gerado uma vez e guardado.**
+Saudacoes e confirmacoes sao um conjunto pequeno e finito — a lentidao nao
+importa quando acontece so uma vez.
+
+Duas notas de implementacao que custaram tempo:
+- O modelo `q8f16` do Kokoro **derruba o onnxruntime com segfault** nesta
+  maquina. Usamos o `model_quantized` (int8 puro).
+- O `kokoro-onnx` 0.4.7 manda `speed` como `int32` num modelo que declara
+  `float`. Chamamos a sessao ONNX direto, com o tipo certo.
+
+Os modelos ficam em `vozes/`, fora do git. **Nao** em `dados/` — aquilo e a
+jaula do agente, e modelo de voz nao e dado de cliente. Para rebaixar uma
+voz do Piper:
+
+```
+python -m piper.download_voices pt_BR-jeff-medium --download-dir vozes
+```
+
+As frases que cada voz diz ao ser testada moram em **`ui/src/frases.ts`** —
+um arquivo so pra isso. O botao fala exatamente o que estiver escrito la,
+sem rodizio nem surpresa.
+
+> **A voz do Windows foi removida.** Ela era concatenativa: pedacos de
+> audio gravados e costurados, tecnologia dos anos 90. Nao havia ajuste que
+> resolvesse o timbre robotico; era o metodo.
 
 ### Ouvir — `ive/voz.py` + `POST /voz/ouvir`
 
@@ -422,8 +562,9 @@ ainda mais.
 - [ ] **Memória** — transformar o `logdb` em memória de verdade: recuperação
       semântica e consolidação. É a versão viável da tese de aprendizado contínuo,
       e não precisa de GPU nem de treinar modelo.
-- [ ] **Voz própria (Piper)** — trocar a voz genérica do Windows por uma
-      característica, gerada por um *speaker embedding* que é só do IVE.
+- [x] **Piper** — voz neural local, 6x mais rápida que tempo real na CPU.
+- [ ] **Voz própria** — clonagem (XTTS-v2 / F5-TTS) para uma voz que seja
+      só do IVE. Roda, mas é lento demais sem GPU; fica para quando houver.
 - [ ] Depois — React Native apontando pro mesmo servidor
 
 ### Antes da Semana 3, decidir

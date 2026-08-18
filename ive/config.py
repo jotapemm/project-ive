@@ -51,6 +51,24 @@ IDIOMA_VOZ = os.getenv("IVE_IDIOMA_VOZ", "pt")
 # um arquivo grande aqui é engano ou abuso.
 MAX_AUDIO_MB = int(os.getenv("IVE_MAX_AUDIO_MB", "25"))
 
+# --- Voz (falar) -------------------------------------------------------
+# Piper: rede neural (VITS) exportada para ONNX, rodando aqui. Bem mais
+# natural que a voz do Windows e ainda assim rapida na CPU — o modelo e
+# enxuto e o onnxruntime e otimizado.
+#
+# Vazio = a interface usa a sintese do navegador (voz do Windows) e o
+# servidor nem carrega o Piper. E a escolha do usuario, nao do servidor:
+# ver o seletor em Personalizar.
+VOZ_PIPER = os.getenv("IVE_VOZ_PIPER", "pt_BR-faber-medium")
+
+# Onde ficam os .onnx. NAO e dentro de dados/ — aquilo e a jaula do
+# agente, e modelo de voz nao e dado de cliente.
+VOZES = Path(os.getenv("IVE_VOZES", RAIZ / "vozes")).resolve()
+
+# Ritmo da fala. No Piper isto e `length_scale`: quanto MAIOR, mais
+# devagar (ele estica a duracao de cada fonema). 1.0 = natural.
+PIPER_RITMO = float(os.getenv("IVE_PIPER_RITMO", "1.0"))
+
 # --- Diretórios --------------------------------------------------------
 # JAULA: o agente só enxerga arquivos dentro de DADOS. Ver ive/seguranca.py.
 DADOS = Path(os.getenv("IVE_DADOS", RAIZ / "dados")).resolve()

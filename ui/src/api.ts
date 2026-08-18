@@ -12,6 +12,13 @@
 
 const BASE = "/api";
 
+export type VozDoServidor = {
+  nome: string;      // nome do modelo, usado no pedido
+  motor: string;     // piper | kokoro
+  genero: string;    // m | f | ? — e o proprio rotulo no seletor
+  rapida: boolean;   // false = varios segundos por frase
+};
+
 export type Saude = {
   ok: boolean;
   motor: string;
@@ -25,6 +32,14 @@ export type Saude = {
   pasta_dados: string;
   ferramentas: string[];
   max_iteracoes: number;
+
+  // ouvir (Whisper local)
+  voz_modelo: string;
+  voz_carregada: boolean;
+  // falar. Lista vazia = nenhuma voz baixada, e a interface esconde a
+  // opcao em vez de oferecer algo que vai falhar.
+  fala_vozes: VozDoServidor[];
+  fala_padrao: string;
 };
 
 export type Ferramenta = {

@@ -3,14 +3,16 @@
  *
  * Barra lateral + área de conversa, seguindo o desenho do Figma.
  *
- * A distinção que sustentava as duas colunas antigas continua viva, só
- * mudou de lugar: o que passa pelo MODELO entra pela caixa de texto; o que
- * NÃO passa (as ações diretas) são botões na barra. As respostas caem na
- * mesma conversa, mas marcadas — assim dá pra ver de onde cada coisa veio.
+ * A barra mostra só o que é caminho: os três itens do menu, as conversas
+ * e o rodapé. O cardápio de ferramentas e os botões de ação direta
+ * moravam aqui e saíram — era tripa do motor exposta como decoração,
+ * ocupando a barra inteira sem ninguém usar.
  *
- * Muita coisa aqui ainda é casca: Novo, Projetar, Desenvolver, Conversas,
- * Personalizar e voz não têm nada atrás. Estão marcadas com `title` e
- * desabilitadas em vez de fingirem que funcionam.
+ * Muita coisa aqui ainda é casca: Projetar, Desenvolver, Conversas e
+ * Personalizar não têm nada atrás. Os dois primeiros ficaram CLICÁVEIS
+ * de propósito — desabilitado não recebe :hover, e sem hover não há
+ * animação nenhuma pra ver. O `title` é quem avisa que ainda não fazem
+ * nada.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +20,7 @@ import * as api from "./api";
 import { Abertura, LogoIVE } from "./Logo";
 import * as tema from "./tema";
 import * as voz from "./voz";
+import { amostra } from "./frases";
 import { ModoVoz } from "./ModoVoz";
 
 const JA_ABRIU = "ive-abriu";
@@ -55,31 +58,26 @@ type Mensagem =
 
 export default function App() {
   const [saude, setSaude] = useState<api.Saude | null>(null);
-  const [ferramentas, setFerramentas] = useState<api.Ferramenta[]>([]);
   const [erroInicial, setErroInicial] = useState<string | null>(null);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [rodando, setRodando] = useState(false);
   const [motor, setMotor] = useState<string>("");
 
   const [vozPref, setVozPref] = useState(voz.carregar);
-  const [vozes, setVozes] = useState<SpeechSynthesisVoice[]>([]);
   const [modoVoz, setModoVoz] = useState(false);
 
   // Uma vez só, no primeiro render — a função já limpa a URL ao ler.
   const [daLanding] = useState(lerPergunta);
 
-  // A lista de vozes chega assíncrona — ver o comentário em voz.ts.
-  useEffect(() => {
-    voz.vozes().then(setVozes);
-    return () => voz.calar(); // não deixa fala órfã tocando após sair
-  }, []);
+  // Não deixa fala órfã tocando se a tela sair.
+  useEffect(() => () => voz.calar(), []);
 
   function trocarVoz(p: voz.Preferencias) {
     setVozPref(p);
     voz.guardar(p);
   }
 
-  const falar = (texto: string) => voz.falar(texto, vozPref, vozes);
+  const falar = (texto: string) => voz.falar(texto, vozPref);
 
   const [abrindo, setAbrindo] = useState(
     () => sessionStorage.getItem(JA_ABRIU) !== "1",
@@ -92,10 +90,10 @@ export default function App() {
 
   // Roda em paralelo com a animação de abertura.
   useEffect(() => {
-    Promise.all([api.saude(), api.ferramentas()])
-      .then(([s, f]) => {
+    api
+      .saude()
+      .then((s) => {
         setSaude(s);
-        setFerramentas(f);
         setMotor(s.motor);
       })
       .catch((e) => setErroInicial(e.message));
@@ -113,15 +111,6 @@ export default function App() {
       setMensagens((m) => [...m, { tipo: "erro", texto: (e as Error).message }]);
     } finally {
       setRodando(false);
-    }
-  }
-
-  async function acaoDireta(nome: string, entrada: Record<string, unknown>) {
-    try {
-      const dados = await api.chamarFerramenta(nome, entrada);
-      setMensagens((m) => [...m, { tipo: "direto", ferramenta: nome, dados }]);
-    } catch (e) {
-      setMensagens((m) => [...m, { tipo: "erro", texto: (e as Error).message }]);
     }
   }
 
@@ -147,14 +136,11 @@ export default function App() {
         <div className="janela">
           <Barra
             saude={saude}
-            ferramentas={ferramentas}
-            aoAgir={acaoDireta}
             aoLimpar={() => {
               voz.calar();
               setMensagens([]);
             }}
             vozPref={vozPref}
-            vozes={vozes}
             aoTrocarVoz={trocarVoz}
           />
           <Principal
@@ -178,19 +164,13 @@ export default function App() {
 
 function Barra({
   saude,
-  ferramentas,
-  aoAgir,
   aoLimpar,
   vozPref,
-  vozes,
   aoTrocarVoz,
 }: {
   vozPref: voz.Preferencias;
-  vozes: SpeechSynthesisVoice[];
   aoTrocarVoz: (p: voz.Preferencias) => void;
   saude: api.Saude | null;
-  ferramentas: api.Ferramenta[];
-  aoAgir: (nome: string, entrada: Record<string, unknown>) => void;
   aoLimpar: () => void;
 }) {
   const [recolhida, setRecolhida] = useState(false);
@@ -219,9 +199,9 @@ function Barra({
       </button>
 
       <nav className="nav cascata" key={geracao}>
-        <ItemNav passo={0} icone="+" rotulo="Novo" aoClicar={aoLimpar} />
-        <ItemNav passo={1} icone="✳" rotulo="Projetar" pendente />
-        <ItemNav passo={2} icone=">." rotulo="Desenvolver" pendente />
+        <ItemNav passo={0} arte="mais" rotulo="Novo" aoClicar={aoLimpar} />
+        <ItemNav passo={1} arte="estrela" rotulo="Projetar" semDestino />
+        <ItemNav passo={2} arte="codigo" rotulo="Desenvolver" semDestino />
       </nav>
 
       <div className="rolagem cascata" key={`r${geracao}`}>
@@ -229,48 +209,14 @@ function Barra({
         <p className="vazio">
           Nada por aqui — o IVE ainda não guarda conversa entre execuções.
         </p>
-
-        <h2 className="secao">Ações diretas</h2>
-        <p className="dica">Não passam pelo modelo. Instantâneas e sem custo.</p>
-        <div className="acoes">
-          <button onClick={() => aoAgir("listar_arquivos", {})}>
-            Listar arquivos
-          </button>
-          <button
-            onClick={() =>
-              aoAgir("ler_planilha", { caminho: "clientes_agosto.xlsx" })
-            }
-          >
-            Ler clientes_agosto
-          </button>
-          <button
-            onClick={() =>
-              aoAgir("inspecionar_coluna", {
-                caminho: "clientes_agosto.xlsx",
-                coluna: "E-mail",
-              })
-            }
-          >
-            Conferir coluna E-mail
-          </button>
-        </div>
-
-        <h2 className="secao">Cardápio</h2>
-        <p className="dica">
-          O limite físico do agente: o que não está aqui não é alcançável.
-        </p>
-        <ul className="cardapio">
-          {ferramentas.map((f) => (
-            <li key={f.name} title={f.description}>
-              <code>{f.name}</code>
-              {f.escrita && <span className="escrita">ESCRITA</span>}
-            </li>
-          ))}
-        </ul>
       </div>
 
       <footer className="rodape-barra">
-        <Personalizar pref={vozPref} vozes={vozes} aoTrocarVoz={aoTrocarVoz} />
+        <Personalizar
+          saude={saude}
+          pref={vozPref}
+          aoTrocarVoz={aoTrocarVoz}
+        />
         <button className="usuario" disabled title="Ainda não existe">
           <span className="avatar" />
           <span>
@@ -282,17 +228,93 @@ function Barra({
   );
 }
 
+/*
+ * O ícone de cada item é um desenho, não um caractere solto: cada um tem
+ * animação própria no hover, e animação precisa de peça pra mexer.
+ *
+ *   mais      vem pra frente e dá uma volta inteira
+ *   estrela   o glifo some e vira um círculo de pontinhos
+ *   codigo    o </> se apaga e se redigita, caractere por caractere
+ *
+ * Quem anima é o CSS. Aqui só existe a marcação que dá a ele o que mexer.
+ */
+type Arte = "mais" | "estrela" | "codigo";
+
+const PONTOS = 22;
+const RAIO = 8; // px — o tamanho da esferinha já aberta
+
+/*
+ * Ângulo áureo. Girar este tanto a cada ponto, com o raio crescendo em
+ * raiz quadrada, espalha os pontos SEM alinhar em raios nem em anéis: é a
+ * mesma matemática das sementes de girassol. Um ângulo redondo (45°, 60°)
+ * empilharia tudo em braços de estrela; a raiz quadrada é o que mantém a
+ * densidade igual do centro pra borda, em vez de amontoar no meio.
+ */
+const AUREO = 137.508;
+
+function Icone({ arte }: { arte: Arte }) {
+  if (arte === "estrela")
+    return (
+      <span className="icone icone-estrela" aria-hidden>
+        <span className="glifo">✳</span>
+        {/* Cada ponto carrega só o que é DELE: ângulo, raio, vez na fila
+            e brilho. Tempo, curva e tamanho são iguais pra todos e moram
+            no CSS. Os de dentro são mais claros que os de fora — é o que
+            faz um punhado de pontos chapados parecer uma bolinha. */}
+        {Array.from({ length: PONTOS }, (_, i) => {
+          const r = RAIO * Math.sqrt((i + 0.5) / PONTOS);
+          return (
+            <i
+              key={i}
+              style={
+                {
+                  "--a": `${((i * AUREO) % 360).toFixed(1)}deg`,
+                  "--r": `${r.toFixed(2)}px`,
+                  "--i": i,
+                  "--o": (1 - 0.55 * (r / RAIO)).toFixed(2),
+                } as React.CSSProperties
+              }
+            />
+          );
+        })}
+      </span>
+    );
+
+  if (arte === "codigo")
+    return (
+      <span className="icone icone-codigo" aria-hidden>
+        <b>&lt;</b>
+        <b>/</b>
+        <b>&gt;</b>
+      </span>
+    );
+
+  /*
+   * O + é DESENHADO, e não o caractere "+" — glifo de fonte não fica no
+   * centro da própria caixa, então girando ele o eixo cai fora do
+   * cruzamento e o sinal bamboleia em vez de rodar.
+   *
+   * Repare que não há filho nenhum aqui: os dois traços são PINTADOS na
+   * mesma caixa, pelo CSS. Já foram dois elementos, e o problema era que
+   * cada um arredondava pra grade de pixels por conta própria — dava pra
+   * um ganhar meio pixel de um lado e o outro do outro, e a cruz saía
+   * desencontrada mesmo com a geometria exata. Pintados juntos, eles não
+   * têm como discordar.
+   */
+  return <span className="icone icone-mais" aria-hidden />;
+}
+
 function ItemNav({
-  icone,
+  arte,
   rotulo,
   passo,
-  pendente,
+  semDestino,
   aoClicar,
 }: {
-  icone: string;
+  arte: Arte;
   rotulo: string;
   passo?: number;
-  pendente?: boolean;
+  semDestino?: boolean;
   aoClicar?: () => void;
 }) {
   return (
@@ -300,10 +322,21 @@ function ItemNav({
       className="item-nav"
       style={{ "--passo": passo ?? 0 } as React.CSSProperties}
       onClick={aoClicar}
-      disabled={pendente}
-      title={pendente ? "Ainda não existe" : undefined}
+      title={semDestino ? "Ainda não existe" : undefined}
+      /*
+       * O preenchimento nasce ONDE O MOUSE ENTROU, não no meio do botão.
+       * É o mesmo truque do <BotaoIVE> da landing: o JS só anota a
+       * coordenada numa variável CSS, e quem cresce o círculo é a
+       * transição. Sem isso o efeito é o mesmo pra qualquer entrada e
+       * perde a graça — a mão do usuário é que dá a direção.
+       */
+      onMouseMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        e.currentTarget.style.setProperty("--x", `${e.clientX - r.left}px`);
+        e.currentTarget.style.setProperty("--y", `${e.clientY - r.top}px`);
+      }}
     >
-      <span className="icone">{icone}</span>
+      <Icone arte={arte} />
       <span>{rotulo}</span>
     </button>
   );
@@ -321,17 +354,21 @@ function ItemNav({
  * então dá pra ver o contraste antes de clicar.
  */
 function Personalizar({
+  saude,
   pref,
-  vozes,
   aoTrocarVoz,
 }: {
+  saude: api.Saude | null;
   pref: voz.Preferencias;
-  vozes: SpeechSynthesisVoice[];
   aoTrocarVoz: (p: voz.Preferencias) => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const [fundo, setFundo] = useState(tema.carregar);
-  const ptBr = voz.vozesPtBr(vozes);
+
+  const doPiper = saude?.fala_vozes ?? [];
+  const temVoz = doPiper.length > 0;
+  const vozEscolhida = pref.voz || saude?.fala_padrao || doPiper[0]?.nome || "";
+  const vozAtual = doPiper.find((v) => v.nome === vozEscolhida);
 
   function trocar(novo: string) {
     setFundo(novo);
@@ -367,9 +404,12 @@ function Personalizar({
           </label>
 
           <h3 style={{ marginTop: 16 }}>Voz</h3>
-          {!voz.suportado() || ptBr.length === 0 ? (
+          {!temVoz ? (
             <p className="dica" style={{ padding: 0 }}>
-              Nenhuma voz em português instalada no Windows.
+              Nenhuma voz baixada. Rode, na pasta do projeto:
+              <br />
+              <code>python -m piper.download_voices pt_BR-faber-medium
+              --download-dir vozes</code>
             </p>
           ) : (
             <>
@@ -382,17 +422,28 @@ function Personalizar({
                 <span>Falar as respostas automaticamente</span>
               </label>
 
+              {/* Lista rasa: há uma voz de cada gênero, e agrupar duas
+                  opções por motor era mais moldura que conteúdo. O aviso
+                  de lentidão continua existindo — virou a linha abaixo,
+                  que fala só da voz escolhida. */}
               <select
                 className="seletor-voz"
-                value={pref.vozURI || ptBr[0]?.voiceURI}
-                onChange={(e) => aoTrocarVoz({ ...pref, vozURI: e.target.value })}
+                value={pref.voz || saude?.fala_padrao || doPiper[0]?.nome}
+                onChange={(e) => aoTrocarVoz({ ...pref, voz: e.target.value })}
               >
-                {ptBr.map((v) => (
-                  <option key={v.voiceURI} value={v.voiceURI}>
-                    {v.name.replace(/^Microsoft\s+/, "").replace(/\s*-.*$/, "")}
+                {doPiper.map((v) => (
+                  <option key={v.nome} value={v.nome}>
+                    {v.genero === "f" ? "Feminina" : "Masculina"}
                   </option>
                 ))}
               </select>
+
+              {vozAtual && !vozAtual.rapida && (
+                <p className="dica" style={{ padding: "6px 0 0" }}>
+                  Esta voz leva alguns segundos por frase. Boa para frase
+                  curta.
+                </p>
+              )}
 
               <label className="ritmo">
                 <span>ritmo</span>
@@ -411,13 +462,7 @@ function Personalizar({
 
               <button
                 className="testar"
-                onClick={() =>
-                  voz.falar(
-                    "Pronto. Sou o IVE, e é assim que eu soo.",
-                    pref,
-                    vozes,
-                  )
-                }
+                onClick={() => voz.falar(amostra(vozEscolhida), pref)}
               >
                 ▶ ouvir uma amostra
               </button>
@@ -526,7 +571,7 @@ function Balao({ m, aoFalar }: { m: Mensagem; aoFalar: (t: string) => void }) {
           {m.meta.tokens_in}↑ {m.meta.tokens_out}↓
           {m.meta.cache_leitura > 0 && ` · ${m.meta.cache_leitura} do cache`}
         </span>
-        {voz.suportado() && m.texto.trim() && (
+        {m.texto.trim() && (
           <button
             className="ouvir"
             onClick={() => aoFalar(m.texto)}

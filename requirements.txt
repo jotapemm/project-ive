@@ -18,3 +18,8 @@ faster-whisper>=1.1.0
 
 # voz: FALAR nao aparece aqui — roda no navegador, com a sintese do
 # proprio Windows. Zero dependencia de servidor. Ver ui/src/voz.ts.
+
+# voz: FALAR (ive/fala.py). Piper local, VITS em ONNX.
+# O onnxruntime ja vem pelo faster-whisper, entao isto pesa pouco.
+# As vozes (.onnx, ~63MB cada) sao baixadas a parte, para vozes/.
+piper-tts>=1.7.0

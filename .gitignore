@@ -13,6 +13,10 @@ dados/*
 Thumbs.db
 .claude/
 
+# vozes do Piper: 63MB cada, baixadas sob demanda.
+# Modelo nao vai pro git — o codigo sabe rebaixar (ver ive/fala.py).
+vozes/
+
 # interface
 ui/node_modules/
 ui/dist/
@@ -23,3 +27,7 @@ ui/.vite/
 # Ela mora em ../landing-page-ive, IRMÃ desta pasta e não filha, com o
 # próprio repositório. Como está fora da raiz deste repo, o git daqui nem
 # enxerga a existência dela.
+
+# Audio de teste de voz: gerado a rodo ao comparar timbres, 300 KB cada.
+# Nao e fonte, e prova de escuta — nasce e morre na maquina de quem ouviu.
+*.wav

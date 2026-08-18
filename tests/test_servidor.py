@@ -119,3 +119,29 @@ def test_voz_aparece_na_saude(cliente):
     corpo = cliente.get("/saude").json()
     assert corpo["voz_modelo"]
     assert isinstance(corpo["voz_carregada"], bool)
+
+
+# --- falar (Piper) -----------------------------------------------------
+# Nao sintetizam de verdade: testam os PORTOES e o contrato da rota.
+# Carregar uma voz custa segundos e ~200MB — nao e coisa pra suite.
+
+def test_texto_vazio_da_400(cliente):
+    assert cliente.post("/voz/falar", json={"texto": "   "}).status_code == 400
+
+
+def test_texto_gigante_e_recusado(cliente):
+    r = cliente.post("/voz/falar", json={"texto": "a" * 4001})
+    assert r.status_code == 413
+
+
+def test_voz_inexistente_explica_como_baixar(cliente):
+    """Erro que nao diz o que fazer e so frustracao."""
+    r = cliente.post("/voz/falar", json={"texto": "oi", "voz": "nao_existe"})
+    assert r.status_code == 503
+    assert "download_voices" in r.json()["detail"]
+
+
+def test_saude_lista_as_vozes_baixadas(cliente):
+    corpo = cliente.get("/saude").json()
+    assert isinstance(corpo["fala_vozes"], list)
+    assert corpo["fala_padrao"]

@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/esfera.tsx","./src/logo.tsx","./src/modovoz.tsx","./src/api.ts","./src/main.tsx","./src/microfone.ts","./src/tema.ts","./src/voz.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/esfera.tsx","./src/logo.tsx","./src/modovoz.tsx","./src/api.ts","./src/frases.ts","./src/main.tsx","./src/microfone.ts","./src/tema.ts","./src/voz.ts"],"version":"5.9.3"}

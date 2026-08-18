@@ -27,9 +27,10 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import config, logdb, motores, registry, voz
+from . import config, fala, logdb, motores, registry, voz
 from .loop import rodar
 from .motores import ErroDeMotor
 from .seguranca import CaminhoRecusado
@@ -95,6 +96,10 @@ def saude() -> dict:
         # pra memória — a primeira transcrição leva alguns segundos a mais.
         "voz_modelo": config.MODELO_VOZ,
         "voz_carregada": voz.pronto(),
+        # falar: lista vazia = nenhuma voz baixada, e a interface
+        # esconde a opcao em vez de oferecer algo que vai falhar.
+        "fala_vozes": fala.disponiveis(),
+        "fala_padrao": config.VOZ_PIPER,
     }
 
 
@@ -148,6 +153,44 @@ def chamar_ferramenta(nome: str, entrada: dict[str, Any]) -> Any:
         raise HTTPException(403, str(e))
     except TypeError as e:  # argumento faltando ou a mais
         raise HTTPException(400, f"Argumentos inválidos: {e}")
+
+
+class Fala(BaseModel):
+    texto: str
+    voz: Optional[str] = None
+    ritmo: Optional[float] = None
+
+
+@app.post("/voz/falar")
+def falar(p: Fala) -> Response:
+    """
+    Texto -> WAV, com Piper rodando aqui na maquina.
+
+    Devolve o audio no corpo da resposta, nao um caminho de arquivo: ele
+    e consumido pelo <audio> do navegador e morre ali. Nada encosta no
+    disco, e disco encostado e disco que alguem esquece de limpar.
+
+    Como /voz/ouvir, NAO e `async def` de proposito: sintetizar ocupa a
+    CPU, e o FastAPI joga funcao sincrona num pool de threads. Como
+    `async`, isto travaria o servidor inteiro a cada frase.
+    """
+    if not p.texto.strip():
+        raise HTTPException(400, "Texto vazio.")
+    # Teto generoso, mas teto: a interface ja quebra em frases, entao um
+    # texto gigante aqui e engano.
+    if len(p.texto) > 4000:
+        raise HTTPException(413, "Texto acima de 4000 caracteres.")
+
+    try:
+        wav = fala.sintetizar(p.texto, p.voz, p.ritmo)
+    except fala.ErroDeFala as e:
+        raise HTTPException(503, str(e))
+
+    return Response(
+        content=wav,
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/voz/ouvir")
