@@ -10,6 +10,7 @@ Bloqueia:
   - symlink apontando pra fora
   - extensão fora da lista permitida
 """
+import re
 
 from pathlib import Path
 
@@ -50,3 +51,25 @@ def caminho_seguro(caminho: str, deve_existir: bool = True) -> Path:
         )
 
     return alvo
+
+# --- jaula de URIs -----------------------------------------------------
+#
+# Mesma ideia da jaula de caminhos, para um alvo diferente: aqui a string
+# escolhida pelo modelo não vira arquivo, vira AÇÃO do sistema. O
+# os.startfile abre o que receber — .exe, .bat, link — sem opinião.
+#
+# Por isso a regra é lista de PERMITIDOS: em vez de tentar imaginar todo
+# formato perigoso e esquecer um, descrevemos o único formato aceito.
+
+class UriRecusada(Exception):
+    """Erro de segurança. É devolvido ao modelo como resultado da ferramenta."""
+
+_URI_MUSICA = re.compile(r"^spotify:track:[A-Za-z0-9]{22}\Z")
+
+def uri_segura(uri:str) -> str:
+        if not _URI_MUSICA.match(uri or ""):
+            raise UriRecusada(
+                f"URI '{uri!r}'  Só aceito o formato exato "
+                "spotify:track: seguido de 22 letras ou números."
+            )
+        return uri

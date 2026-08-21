@@ -10,7 +10,7 @@ Uso:
 
 import sys
 
-from ive import config, logdb, registry
+from ive import aprovacao, config, logdb, registry
 from ive.loop import ErroDeConfiguracao, rodar
 
 BANNER = r"""
@@ -46,7 +46,10 @@ def mostrar_historico() -> None:
 
 def executar(pedido: str) -> None:
     try:
-        r = rodar(pedido, ao_vivo=print)
+        # Aqui existe um humano no stdin, então o portão pergunta e espera.
+        # É o único chamador do projeto que pode fazer isso.
+        r = rodar(pedido, ao_vivo=print,
+                  portao=aprovacao.perguntar_no_terminal)
     except ErroDeConfiguracao as e:
         print(f"\n[config] {e}\n")
         sys.exit(1)

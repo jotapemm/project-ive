@@ -78,6 +78,13 @@ BANCO = LOGS / "ive.sqlite3"
 DADOS.mkdir(parents=True, exist_ok=True)
 LOGS.mkdir(parents=True, exist_ok=True)
 
+# --- Spotify -----------------------------------------------------------
+# O crachá do APLICATIVO, não o seu login. Serve só para BUSCAR música —
+# quem toca é o app instalado no PC, pelo protocolo spotify:. Por isso
+# aqui não há token de usuário nem consentimento: nada toca a sua conta.
+SPOTIFY_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
+SPOTIFY_SEGREDO = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+
 # --- Personalidade -----------------------------------------------------
 PROMPT_SISTEMA = """Você é o IVE, assistente de tarefas digitais de um escritório contábil.
 

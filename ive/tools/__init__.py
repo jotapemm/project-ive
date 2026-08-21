@@ -8,3 +8,4 @@ de ser importada aqui.
 
 from . import arquivos  # noqa: F401
 from . import planilha  # noqa: F401
+from . import spotify  # noqa: F401

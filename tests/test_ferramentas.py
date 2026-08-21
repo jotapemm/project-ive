@@ -73,9 +73,15 @@ def test_listar_arquivos_enxerga_a_planilha():
 
 
 # --- registro ----------------------------------------------------------
+# As únicas ferramentas que mexem no mundo. Acrescentar uma aqui é uma
+# DECISÃO consciente, não um detalhe de implementação: toda escrita passa
+# pelo portão de aprovação, e a interface escolhe o que fica liberado sem
+# perguntar (ver ESCRITAS_LIBERADAS em ui/src/api.ts).
+ESCRITAS_CONHECIDAS = {"tocar_musica"}
 
-def test_cardapio_e_somente_leitura_por_enquanto():
-    assert all(not registry.eh_escrita(n) for n in registry.listar())
+def test_so_essas_ferramentas_escrevem():
+    achadas = {n for n in registry.listar() if registry.eh_escrita(n)}
+    assert achadas == ESCRITAS_CONHECIDAS
 
 
 def test_ferramenta_fora_do_cardapio_e_bloqueada():

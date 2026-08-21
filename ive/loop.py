@@ -18,7 +18,7 @@ import json
 import time
 from typing import Any, Callable, Optional
 
-from . import config, logdb, motores, registry
+from . import aprovacao, config, logdb, motores, registry
 from .motores import Chamada, ErroDeMotor
 from .seguranca import CaminhoRecusado
 from . import tools  # noqa: F401  (import registra as ferramentas)
@@ -29,14 +29,21 @@ ErroDeConfiguracao = ErroDeMotor
 
 def rodar(pedido: str, usuario: str = "local",
           ao_vivo: Optional[Callable[[str], None]] = None,
-          motor: Optional[str] = None) -> dict:
+          motor: Optional[str] = None,
+          portao: Optional[aprovacao.Portao] = None) -> dict:
     """
     Executa uma tarefa do começo ao fim.
 
     ao_vivo: callback opcional de progresso (print, lista, Streamlit, etc).
     motor:   sobrescreve IVE_MOTOR nesta execução.
+    portao:  quem autoriza as ferramentas de ESCRITA. Ver ive/aprovacao.py.
+
+    O padrão do portão é negar. Quem chama sem passar um está dizendo
+    "esta execução é só leitura" — e é assim que tem que ser: esquecer o
+    argumento não pode virar permissão.
     """
     aviso = ao_vivo or (lambda _: None)
+    autorizar = portao or aprovacao.negar_tudo
     cerebro = motores.escolher(motor)
     logdb.inicializar()
     execucao_id = logdb.abrir_execucao(pedido, usuario, cerebro.descricao)
@@ -96,6 +103,37 @@ def rodar(pedido: str, usuario: str = "local",
                       f"{json.dumps(chamada.entrada, ensure_ascii=False)})")
 
                 inicio = time.time()
+
+                # O PORTÃO, antes de qualquer execução.
+                #
+                # Só ferramenta de escrita passa por aqui — leitura não
+                # muda nada no mundo e perguntar a cada uma delas treinaria
+                # o usuário a aprovar no automático, que é como um portão
+                # deixa de valer.
+                #
+                # A recusa volta ao MODELO como resultado da ferramenta, e
+                # não como exceção: ele precisa saber que foi negado pra
+                # explicar ao usuário, em vez de a execução morrer sem
+                # resposta. É o mesmo tratamento do caminho recusado.
+                try:
+                    negacao = None
+                    if registry.eh_escrita(chamada.nome):
+                        d = autorizar(aprovacao.Pedido(chamada.nome,
+                                                       chamada.entrada))
+                        if not d.aprovado:
+                            negacao = d.motivo
+                except registry.FerramentaDesconhecida as e:
+                    negacao = str(e)
+
+                if negacao:
+                    ms = int((time.time() - inicio) * 1000)
+                    aviso(f"    ⛔ recusado: {negacao}")
+                    logdb.registrar_chamada(execucao_id, chamada.nome,
+                                            chamada.entrada,
+                                            {"erro": negacao}, negacao, ms)
+                    resultados.append((chamada, {"erro": negacao}, True))
+                    continue
+
                 try:
                     saida, erro = registry.executar(chamada.nome, chamada.entrada), None
                 except (CaminhoRecusado, registry.FerramentaDesconhecida) as e:

@@ -3,7 +3,13 @@
 import json
 from typing import Any
 
-from anthropic import Anthropic
+from anthropic import ( 
+    Anthropic,
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    RateLimitError
+)
 
 from .. import config
 from .base import Chamada, ErroDeMotor, Resposta
@@ -42,14 +48,36 @@ class MotorNuvem:
         return [{"role": "user", "content": pedido}]
 
     def conversar(self, historico: list, ferramentas: list[dict]) -> Resposta:
-        bruta = self._cliente.messages.create(
-            model=config.MODELO,
-            max_tokens=config.MAX_TOKENS,
-            system=self._sistema,
-            tools=ferramentas,
-            messages=historico,
-        )
-
+        # O motor TRADUZ: nada de exceção da biblioteca da Anthropic sai
+        # daqui. Quem chama só conhece ErroDeMotor — é o que permite o
+        # loop e o servidor não saberem que a Anthropic existe.
+        try:
+            bruta = self._cliente.messages.create(
+                model=config.MODELO,
+                max_tokens=config.MAX_TOKENS,
+                system=self._sistema,
+                tools=ferramentas,
+                messages=historico,
+            )
+        except AuthenticationError:
+            raise ErroDeMotor(
+                "A ANTHROPIC_API_KEY foi recusada (401). Ela existe e tem o "
+                "formato certo, mas não vale — revogada, expirada, ou de "
+                "outra organização. Gere outra em "
+                "console.anthropic.com/settings/keys, ou rode sem custo com "
+                "IVE_MOTOR=local."
+            )
+        except RateLimitError:
+            raise ErroDeMotor(
+                "Limite de requisições atingido (429). Espere alguns "
+                "segundos e tente de novo."
+            )
+        except APIConnectionError as e:
+            raise ErroDeMotor(f"Não consegui falar com a Anthropic: {e}")
+        except APIStatusError as e:
+            raise ErroDeMotor(f"A Anthropic recusou o pedido({e.status_code}): {e.message}")
+        
+            
         r = Resposta(
             bruto=bruta.content,
             # input_tokens conta só o que NÃO veio do cache. O prompt real

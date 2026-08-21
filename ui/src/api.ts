@@ -103,10 +103,33 @@ export const ferramentas = () => pedir<Ferramenta[]>("/ferramentas");
 export const historico = () => pedir<Execucao[]>("/historico");
 
 /** Passa pelo modelo. Custa tokens e demora. `motor` sobrescreve o padrão. */
+/**
+ * Ferramentas de ESCRITA que esta interface autoriza sem perguntar.
+ *
+ * O servidor nega toda escrita por padrão. Do outro lado de um HTTP não
+ * há ninguém pra confirmar no meio da execução — e o loop do agente não
+ * guarda tarefa pendente —, então a autorização vem antes, no pedido, e
+ * vale só pra ele.
+ *
+ * `tocar_musica` está aqui por uma decisão consciente sobre CONSEQUÊNCIA:
+ * o pior caso é sair a faixa errada, e isso custa um "não, a outra". Uma
+ * ferramenta que mandasse e-mail ou apagasse arquivo NÃO entra nesta
+ * lista sem uma tela de confirmação antes.
+ *
+ * O que a lista preserva: liberar esta porta não libera a casa. Qualquer
+ * escrita futura que apareça no cardápio continua barrada até alguém
+ * escrever o nome dela aqui, de propósito.
+ */
+const ESCRITAS_LIBERADAS = ["tocar_musica"];
+
 export const executar = (texto: string, motor?: string) =>
   pedir<Resultado>("/executar", {
     method: "POST",
-    body: JSON.stringify({ texto, motor: motor ?? null }),
+    body: JSON.stringify({
+      texto,
+      motor: motor ?? null,
+      permitir: ESCRITAS_LIBERADAS,
+    }),
   });
 
 /** Não passa pelo modelo. Instantâneo e de graça. */

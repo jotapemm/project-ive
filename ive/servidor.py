@@ -30,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from . import config, fala, logdb, motores, registry, voz
+from . import aprovacao, config, fala, logdb, motores, registry, voz
 from .loop import rodar
 from .motores import ErroDeMotor
 from .seguranca import CaminhoRecusado
@@ -61,6 +61,13 @@ class Pedido(BaseModel):
     # Sobrescreve IVE_MOTOR nesta execução — deixa a tela comparar os dois
     # cérebros no mesmo pedido, sem reiniciar nada.
     motor: Optional[str] = None
+    # Ferramentas de ESCRITA autorizadas para este pedido, por nome.
+    #
+    # Do outro lado de um HTTP não há ninguém para perguntar no meio da
+    # execução, e o loop não guarda tarefa pendente — então a autorização
+    # vem ANTES, junto do pedido, e vale só para ele. Lista vazia (o
+    # padrão) significa execução somente leitura.
+    permitir: list[str] = []
 
 
 @app.get("/saude")
@@ -119,7 +126,8 @@ def executar(p: Pedido) -> dict:
     trilha: list[str] = []
     try:
         resultado = rodar(p.texto, usuario=p.usuario,
-                          ao_vivo=trilha.append, motor=p.motor)
+                          ao_vivo=trilha.append, motor=p.motor,
+                          portao=aprovacao.permitir_apenas(p.permitir))
     except ErroDeMotor as e:
         # Motor indisponível: sem chave, ou Ollama fora do ar.
         raise HTTPException(503, str(e))
@@ -144,6 +152,16 @@ def chamar_ferramenta(nome: str, entrada: dict[str, Any]) -> Any:
     Mesma função que o agente chamaria, mesma jaula de caminhos, mesmo
     registry. A única diferença é quem escolheu os argumentos: aqui foi
     a interface, não o modelo.
+
+    E é por isso que aqui NÃO passa pelo portão de aprovação, mesmo em
+    ferramenta de escrita. O portão existe para pôr um humano entre a
+    decisão do MODELO e o mundo; nesta rota o humano já é quem decide —
+    ele escolheu a ferramenta e os argumentos. Pedir confirmação do que a
+    pessoa acabou de mandar fazer é o tipo de aviso que ensina todo mundo
+    a clicar "sim" sem ler.
+
+    O que sustenta isso é a rota escutar só em 127.0.0.1. Se um dia o
+    servidor abrir para a rede, esta é a primeira porta a revisar.
     """
     try:
         return registry.executar(nome, entrada)
